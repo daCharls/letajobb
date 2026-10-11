@@ -1,0 +1,6 @@
+Den här filen stänger av update-system.mjs check/apply.
+
+letajobb är en svensk fork av santifer/career-ops. Upstreams uppdaterare
+skriver över templates/, .claude/skills/, CLAUDE.md, generate-pdf.mjs m.fl.
+och skulle därmed radera forkens anpassningar. Ta inte bort filen om du inte
+medvetet vill byta tillbaka till upstream-versionen.

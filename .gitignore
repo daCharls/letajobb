@@ -20,6 +20,9 @@ career-ops/output/
 # Utvärderingsrapporter med kontaktuppgifter
 career-ops/reports/
 
+# career-ops tracker-rader (en rad per utvärdering = persondata), även merged/ och archived/
+career-ops/batch/tracker-additions/**/*.tsv
+
 # STAR-historier och interview-prep (persondata om din karriär)
 career-ops/interview-prep/
 
