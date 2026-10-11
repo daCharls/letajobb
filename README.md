@@ -25,7 +25,7 @@ Det här var ursprungligen mitt eget, faktiska jobbsök — inte ett demoprojekt
 ## Struktur
 
 ```
-hittajobb/
+letajobb/
 ├── pipeline.example.html          # Exempel på pipeline-formatet (committed)
 ├── pipeline.html                  # Din egen jobbpipeline (gitignored, genereras lokalt)
 ├── reports/                       # Utvärderingsrapporter (gitignored)
@@ -38,7 +38,8 @@ hittajobb/
 │   ├── scan.py                    # Batch-scanner med titelfiltrering
 │   ├── init.py                    # Bootstrap: skapar pipeline.html + datafiler för en ny installation
 │   ├── pipeline_lib.py            # Backup, atomisk skrivning, verifiering, räknarsynk
-│   └── verify.py                  # Fristående strukturkontroll av pipeline.html
+│   ├── verify.py                  # Fristående strukturkontroll av pipeline.html
+│   └── test_scan.py               # Regressionstester (inget nätverk, rör inte din pipeline)
 └── career-ops/                    # Pipeline-motor (fork av santifer/career-ops)
     ├── .claude/skills/career-ops/ # /career-ops-skillen (committed sedan denna mall städades)
     ├── config/
@@ -68,6 +69,7 @@ Förutsättningar: Python 3.10+, Node.js 18+, git.
    sekretess och skrivstil, och fyller i din profil åt dig. I Claude Code
    kan du också köra `/starta-jobbsok` direkt.
 6. Testa scannern: `python af-mcp/scan.py --dry-run --days 14`
+7. Valfritt: `python af-mcp/test_scan.py` kör regressionstesterna för scannern
 
 Cowork-not: samma flöde fungerar i Cowork som i Claude Code — AI:n läser
 `CLAUDE.md`/`AGENTS.md` automatiskt och hittar `ONBOARDING.md` därifrån, det

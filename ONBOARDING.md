@@ -139,6 +139,7 @@ annars påminn om att köra `python af-mcp/scan.py` manuellt då och då.
 | `scan.py` kraschar med `FileNotFoundError` | `pipeline.html` eller `career-ops/data/pipeline.md` saknas | `python af-mcp/init.py` |
 | `scan.py`/`verify.py` kraschar på `UnicodeEncodeError` i Windows-terminalen | Gammal version utan UTF-8-fix | Ska vara fixat i alla af-mcp-skript nu — om det ändå händer, kör `chcp 65001` i terminalen först |
 | `scan.py` säger "portals.yml saknas" och avbryter | Väntat beteende — filen är gitignorerad och innehåller din sökprofil | `python af-mcp/init.py` skapar den från `career-ops/templates/portals.svenska.example.yml` |
+| `scan.py` avslutar med "Alla N sökningar misslyckades" (exit-kod 2) | JobTech API:t svarar inte eller nätet blockerar `jobsearch.api.jobtechdev.se` | Kolla nätverket/proxyn och kör igen. Inga filer har ändrats |
 | Titelfiltret ger 0 träffar | `portals.yml` kopierades från fel mall (t.ex. `templates/portals.example.yml`, som är AI/ML på engelska) eller `title_filter.positive` är för smalt | Använd `career-ops/templates/portals.svenska.example.yml`, bredda listan |
 | `/career-ops`-lägena pratar spanska | Upstream-arv, se ovan | Inget att fixa akut — fungerar ändå, översättning är ett eget projekt |
 

@@ -35,14 +35,23 @@ def backup_pipeline(path: Path) -> Path:
     """Kopierar pipeline.html till .bak.YYYYMMDD_HHMMSS och gallrar gamla."""
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     bak = path.with_name(f"{path.name}.bak.{stamp}")
+    # Två backuper inom samma sekund (t.ex. scan.py direkt följt av
+    # verify.py --sync) får aldrig skriva över varandra: lägg till _2, _3 ...
+    n = 2
+    while bak.exists():
+        bak = path.with_name(f"{path.name}.bak.{stamp}_{n}")
+        n += 1
     bak.write_bytes(path.read_bytes())
     # Gallra: behåll de KEEP_BACKUPS senaste tidsstämplade backuperna.
-    # OBS: C:\AI\hittajobb är en Cowork-skyddad mapp där filer inte får
-    # raderas efter skrivning - unlink() ger PermissionError där. Vi
-    # försöker ändå (funkar om spärren lättar eller körs utanför Cowork),
-    # men ett misslyckat unlink får ALDRIG stoppa hela skrivningen.
-    pattern = re.compile(re.escape(path.name) + r"\.bak\.\d{8}_\d{6}$")
-    baks = sorted(p for p in path.parent.iterdir() if pattern.match(p.name))
+    # OBS: i vissa miljöer (t.ex. skyddade mappar i Cowork) får filer inte
+    # raderas efter skrivning - unlink() ger då PermissionError. Vi försöker
+    # ändå, men ett misslyckat unlink får ALDRIG stoppa hela skrivningen.
+    pattern = re.compile(re.escape(path.name) + r"\.bak\.(\d{8}_\d{6})(?:_(\d+))?$")
+    def _order(p: Path) -> tuple[str, int]:
+        m = pattern.match(p.name)
+        return (m.group(1), int(m.group(2) or 1))
+
+    baks = sorted((p for p in path.parent.iterdir() if pattern.match(p.name)), key=_order)
     for old in baks[:-KEEP_BACKUPS]:
         try:
             old.unlink()
