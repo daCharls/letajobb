@@ -297,6 +297,14 @@ function dismiss() {
 
 const cmd = process.argv[2] || 'check';
 
+// Fork-spärr: letajobb är en svensk fork. En upstream-uppdatering skulle skriva
+// över forkens anpassningar (templates/, .claude/skills/, CLAUDE.md m.fl.).
+// Så länge .no-upstream-update finns gör check/apply ingenting.
+if (existsSync(join(ROOT, '.no-upstream-update')) && (cmd === 'check' || cmd === 'apply')) {
+  console.log(JSON.stringify({ status: 'disabled-fork', reason: '.no-upstream-update finns, se CLAUDE.md' }));
+  process.exit(0);
+}
+
 switch (cmd) {
   case 'check': await check(); break;
   case 'apply': await apply(); break;

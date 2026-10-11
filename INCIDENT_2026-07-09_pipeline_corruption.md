@@ -35,7 +35,7 @@ content = content[:scan_section_match.start()].rstrip() + '\n'
 Detta raderade alla äldre scan-sektioner (med ~99 jobb).
 
 ### 2. Edit-verktyget vs bash-mount: olika filsystem-snapshots
-Edit-verktyget skriver till Windows-sökvägen (`C:\AI\hittajobb\pipeline.html`).
+Edit-verktyget skriver till Windows-sökvägen (projektmappen på Windows-sidan).
 Bash-skript läser/skriver via Linux-mount (`/sessions/.../mnt/hittajobb/pipeline.html`).
 
 Dessa kan vara ur synk. Det förklarar varför `pipeline.html.corrupted` (sparad av recovery-skriptet via bash) hade 15 applied istället för de 21 som Edit-versionen hade: bash-scriptet läste en äldre snapshot som inte hade Edit-ändringarna.

@@ -6,6 +6,11 @@ Användning:
     python af-mcp/scan.py --days 14    # senaste 14 dagarna
     python af-mcp/scan.py --dry-run    # visa resultat utan att skriva filer
     python af-mcp/scan.py --no-filter  # skippa titelfiltrering (debugging)
+
+Exit-koder:
+    0  OK (även när inga nya jobb hittades)
+    1  saknad fil eller pipeline.html-skrivning vägrad av safe_write
+    2  alla sökningar misslyckades (API/nät nere) - ingenting skrevs
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import csv
 import re
 import sys
 from datetime import date
+from html import escape
 from pathlib import Path
 
 import httpx
@@ -150,7 +156,12 @@ def _load_known_ids() -> set[str]:
     return known
 
 
-async def _search(q: str, municipality: str, remote: bool | None, published_after: str, limit: int = 50) -> list[dict]:
+async def _search(q: str, municipality: str, remote: bool | None, published_after: str, limit: int = 50) -> list[dict] | None:
+    """Returnerar träfflistan, eller None om anropet misslyckades.
+
+    None (inte []) så att main() kan skilja "inga träffar" från "API:t svarade
+    inte" — annars ser ett trasigt API ut som en lyckad körning utan nya jobb.
+    """
     params: dict = {
         "q": q,
         "limit": limit,
@@ -167,7 +178,7 @@ async def _search(q: str, municipality: str, remote: bool | None, published_afte
         return data.get("hits", [])
     except Exception as e:
         print(f"  ⚠️  Sökning '{q}' misslyckades: {e}", file=sys.stderr)
-        return []
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -175,11 +186,16 @@ async def _search(q: str, municipality: str, remote: bool | None, published_afte
 # ---------------------------------------------------------------------------
 def _html_entry(ad: dict, data_tags: str, cat_label: str, default_city: str) -> str:
     # Em-dash får ALDRIG slinka in i output (hård regel). En-dash är ok.
-    headline = ad.get("headline", "Utan rubrik").replace("—", "-")
-    employer = ad.get("employer", {}).get("name", "Okänd").replace("—", "-")
+    # Allt som kommer från API:t eller portals.yml HTML-escapas: annonsrubriker
+    # som "Sales & Marketing" eller "<Remote>" får inte bryta markupen eller
+    # injicera HTML i pipeline.html.
+    headline = escape((ad.get("headline") or "Utan rubrik").replace("—", "-"))
+    employer = escape(((ad.get("employer") or {}).get("name") or "Okänd").replace("—", "-"))
     wp = ad.get("workplace_address", {}) or {}
-    city = wp.get("city", "") or wp.get("municipality", "")
-    ad_id = ad.get("id", "")
+    city = escape(wp.get("city", "") or wp.get("municipality", "") or "")
+    cat_label = escape(str(cat_label))
+    default_city = escape(str(default_city))
+    ad_id = escape(str(ad.get("id", "")))
     url = f"https://arbetsformedlingen.se/platsbanken/annonser/{ad_id}"
 
     deadline = ad.get("application_deadline", "")
@@ -277,6 +293,8 @@ async def main(days: int, dry_run: bool, no_filter: bool) -> None:
     all_hits: dict[str, dict] = {}          # ad_id -> ad
     id_to_search: dict[str, dict] = {}      # ad_id -> searches-post (för taggning)
 
+    failed: list[str] = []
+
     for search in searches:
         q = search["q"]
         municipality = search.get("municipality", municipality_default)
@@ -284,6 +302,10 @@ async def main(days: int, dry_run: bool, no_filter: bool) -> None:
         label_loc = " (remote)" if remote else f" ({default_city})" if municipality else " (Sverige)"
         print(f"  🔎 '{q}'{label_loc}...")
         hits = await _search(q, municipality, remote, published_after)
+        if hits is None:
+            failed.append(q)
+            print("    → MISSLYCKADES (se varning ovan)")
+            continue
         new_here = 0
         filtered_out = 0
         for ad in hits:
@@ -300,6 +322,23 @@ async def main(days: int, dry_run: bool, no_filter: bool) -> None:
         filter_note = f", {filtered_out} filtrerade" if filtered_out else ""
         print(f"    → {len(hits)} träffar, {new_here} nya{filter_note}")
 
+    # Alla sökningar misslyckades = API:t är nere, nätet blockerat e.d. Det får
+    # ALDRIG se ut som "inga nya jobb" — särskilt inte i schemalagda körningar.
+    if failed and len(failed) == len(searches):
+        print(
+            f"\n❌ Alla {len(searches)} sökningar misslyckades — ingen data hämtades, "
+            "inga filer ändrade. Kolla nätverket/JobTech API:t och kör igen.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if failed:
+        print(
+            f"\n⚠️  {len(failed)} av {len(searches)} sökningar misslyckades: "
+            + ", ".join(f"'{q}'" for q in failed)
+            + ". Resultatet nedan är ofullständigt.",
+            file=sys.stderr,
+        )
+
     if not all_hits:
         print("\n✅ Inga nya jobb hittades.")
         return
@@ -309,7 +348,7 @@ async def main(days: int, dry_run: bool, no_filter: bool) -> None:
 
     for ad_id, ad in all_hits.items():
         headline = ad.get("headline", "")
-        employer = ad.get("employer", {}).get("name", "")
+        employer = (ad.get("employer") or {}).get("name", "")
         wp = ad.get("workplace_address", {}) or {}
         city = wp.get("city", "") or wp.get("municipality", "")
         deadline = ad.get("application_deadline", "")
@@ -323,44 +362,18 @@ async def main(days: int, dry_run: bool, no_filter: bool) -> None:
     if dry_run:
         return
 
-    # --- Uppdatera scan-history.tsv ---
-    with open(SCAN_HISTORY, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=["url", "first_seen", "portal", "title", "company", "status"],
-            delimiter="\t",
-        )
-        for ad_id, ad in all_hits.items():
-            writer.writerow({
-                "url": f"https://arbetsformedlingen.se/platsbanken/annonser/{ad_id}",
-                "first_seen": TODAY,
-                "portal": "Platsbanken",
-                "title": ad.get("headline", ""),
-                "company": ad.get("employer", {}).get("name", ""),
-                "status": "added",
-            })
-    print(f"✅ scan-history.tsv — {n} rader tillagda")
+    # Skrivordning (VIKTIGT): pipeline.html först, scan-history.tsv sist.
+    # scan-history.tsv är det som gör ett jobb "känt" för nästa scan. Skrivs den
+    # först och pipeline.html sedan vägras av safe_write, försvinner jobben för
+    # gott: de syns inte i pipelinen och hoppas över i alla framtida scans.
+    # Därför kontrolleras alla filer innan något skrivs, och historiken skrivs
+    # bara när pipeline.html (källan till sanning) redan är uppdaterad.
+    for required in (PIPELINE_HTML, PIPELINE_MD, SCAN_HISTORY):
+        if not required.exists():
+            print(f"❌ {required.relative_to(ROOT)} saknas. {INIT_HINT}", file=sys.stderr)
+            sys.exit(1)
 
-    # --- Uppdatera pipeline.md ---
-    if not PIPELINE_MD.exists():
-        print(f"❌ {PIPELINE_MD.relative_to(ROOT)} saknas. {INIT_HINT}", file=sys.stderr)
-        sys.exit(1)
-    md_lines = [_pipeline_md_entry(ad, default_city) for ad in all_hits.values()]
-    md = PIPELINE_MD.read_text(encoding="utf-8")
-    marker = "## Pendientes\n"
-    idx = md.find(marker)
-    if idx != -1:
-        pos = idx + len(marker)
-        md = md[:pos] + "\n".join(md_lines) + "\n" + md[pos:]
-    else:
-        md += "\n" + "\n".join(md_lines) + "\n"
-    PIPELINE_MD.write_text(md, encoding="utf-8")
-    print(f"✅ pipeline.md — {n} jobb tillagda")
-
-    # --- Uppdatera pipeline.html ---
-    if not PIPELINE_HTML.exists():
-        print(f"❌ {PIPELINE_HTML.relative_to(ROOT)} saknas. {INIT_HINT}", file=sys.stderr)
-        sys.exit(1)
+    # --- 1. pipeline.html (backup + atomisk skrivning + verifiering) ---
     html_entries = "".join(
         _html_entry(ad, *_tags_for_search(id_to_search[ad_id], default_city), default_city)
         for ad_id, ad in all_hits.items()
@@ -375,8 +388,47 @@ async def main(days: int, dry_run: bool, no_filter: bool) -> None:
     html = insert_new_jobs(html, html_entries)
     html = stamp_updated(html)
     html = sync_counters(html)
-    safe_write(PIPELINE_HTML, html, expect_total=old_total + n)
+    try:
+        safe_write(PIPELINE_HTML, html, expect_total=old_total + n)
+    except RuntimeError as e:
+        print(
+            f"❌ {e}\n   Inga filer ändrade (pipeline.md och scan-history.tsv orörda), "
+            "så jobben dyker upp igen nästa scan. Kör python af-mcp/verify.py.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     print(f"✅ pipeline.html — {n} nya jobb i Ovärderade-sektionen (totalt {old_total + n})")
+
+    # --- 2. pipeline.md ---
+    md_lines = [_pipeline_md_entry(ad, default_city) for ad in all_hits.values()]
+    md = PIPELINE_MD.read_text(encoding="utf-8")
+    marker = "## Pendientes\n"
+    idx = md.find(marker)
+    if idx != -1:
+        pos = idx + len(marker)
+        md = md[:pos] + "\n".join(md_lines) + "\n" + md[pos:]
+    else:
+        md += "\n" + "\n".join(md_lines) + "\n"
+    PIPELINE_MD.write_text(md, encoding="utf-8")
+    print(f"✅ pipeline.md — {n} jobb tillagda")
+
+    # --- 3. scan-history.tsv (sist: markerar jobben som kända) ---
+    with open(SCAN_HISTORY, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["url", "first_seen", "portal", "title", "company", "status"],
+            delimiter="\t",
+        )
+        for ad_id, ad in all_hits.items():
+            writer.writerow({
+                "url": f"https://arbetsformedlingen.se/platsbanken/annonser/{ad_id}",
+                "first_seen": TODAY,
+                "portal": "Platsbanken",
+                "title": ad.get("headline", ""),
+                "company": (ad.get("employer") or {}).get("name", ""),
+                "status": "added",
+            })
+    print(f"✅ scan-history.tsv — {n} rader tillagda")
 
     print(f"\n🎯 Kör karriärpipelinen: /career-ops pipeline  för att utvärdera jobben")
 

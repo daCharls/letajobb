@@ -42,8 +42,8 @@ Kör `/career-ops` i career-ops-mappen för alla kommandon.
 Alla personliga anpassningar: `career-ops/config/profile.yml` + `career-ops/modes/_profile.md`
 
 ## HTML-output (VIKTIGT)
-- `pipeline.html` — jobbpipeline med filter, statusmarkeringar och rapportlänkar. Bra som din startsida i Chrome. Ligger i hittajobb-roten, gitignored (persondata) — se `pipeline.example.html` för formatet.
-- `reports/{NNN}-{företag}.html` (t.ex. `reports/001-lansstyrelsen-vgr.html`) — utvärderingsrapporter per jobb, i undermappen `reports/`
+- `pipeline.html` — jobbpipeline med filter, statusmarkeringar och rapportlänkar. Bra som din startsida i Chrome. Ligger i repo-roten, gitignored (persondata) — se `pipeline.example.html` för formatet.
+- `reports/{NNN}-{företag}.html` (t.ex. `reports/001-exempelbolag.html`) — utvärderingsrapporter per jobb, i undermappen `reports/`
 - Markdown-versioner sparas även i `career-ops/reports/` för career-ops-systemet
 - **Efter varje utvärdering:** spara HTML-rapporten i `reports/`, uppdatera pipeline.html med status "UTVÄRDERAD" + länk `reports/NNN-slug.html`
 - **Efter varje scan:** uppdatera pipeline.html med nya jobb
@@ -215,15 +215,14 @@ python af-mcp/scan.py --dry-run    # visa resultat utan att skriva filer
 python af-mcp/scan.py --no-filter  # skippa titelfiltrering (debugging)
 ```
 
-Scannern filtrerar träffar mot titelfiltret i `career-ops/portals.yml` (90 positiva, 40 negativa termer).
+Scannern filtrerar träffar mot titelfiltret i `career-ops/portals.yml` (`title_filter.positive`/`negative`).
 
-### Sökfrågor (SEARCHES i scan.py)
-Ursprungliga 13 frågor + breddning 2026-06-04 i två steg:
-- Steg 1: customer success (Gbg+remote), customer support specialist (remote), onboarding (remote), integration (Gbg), API (Gbg)
-- Steg 2: IT-koordinator, systemadministratör, technical writer, teknisk skribent, application specialist (alla Gbg), solutions engineer + technical account manager (remote)
-Totalt 27 sökfrågor.
+### Sökfrågor
+Sökfrågorna bor i `career-ops/portals.yml` under `platsbanken.searches` (en post per fråga
+med `q`, `category`, valfritt `remote`, `municipality` och `label`), inte i scan.py. Utgå från
+`career-ops/templates/portals.svenska.example.yml`. Bredda med fler frågor och fler negativa
+brusfilter-termer (t.ex. PhD, Doktorand, Elektriker) när du ser vilket brus din sökning ger.
 
-Negativfilter utökades med 14 brusfilter-termer: Postdoc, Post-doc, Post-doctoral, PhD, Doktorand, Konstruktör, Beredare, Servicetekniker, Fältservice, Elektriker, Mekaniker, Svetsare, Montör, Hårdvaru
 Uppdaterar: `pipeline.html`, `career-ops/data/pipeline.md`, `career-ops/data/scan-history.tsv`
 
 ### Säkerhetslager (nytt 2026-07-09)
@@ -231,34 +230,36 @@ Uppdaterar: `pipeline.html`, `career-ops/data/pipeline.md`, `career-ops/data/sca
 - `af-mcp/verify.py` - fristående kontroll: `python3 af-mcp/verify.py` (läge: check) eller `--sync` (rättar räknare)
 - `af-mcp/rebuild.py` - engångsmigrationen som flyttade in scan-sektionerna 2026-07-09; kan återanvändas som full ombyggnad om strukturen skadas igen
 - scan.py tar backup, skriver atomiskt och verifierar. Vid fel: avbryter utan att skriva.
+- **Skrivordning i scan.py:** `pipeline.html` först, sedan `pipeline.md`, sist `scan-history.tsv`. Historiken är det som gör ett jobb "känt" - skrivs den bara när pipeline.html redan är uppdaterad kan ett vägrat skrivförsök aldrig tappa jobb för gott.
+- **Exit-koder:** 0 = OK (även "inga nya jobb"), 1 = saknad fil eller vägrad skrivning, 2 = alla sökningar misslyckades (API/nät nere). Schemalagda körningar ska rapportera allt utom 0 till användaren, inte tolka det som "inga nya jobb".
 
 ## CV per jobb (OBLIGATORISKT)
 - **Skapa ALLTID ett dedikerat CV för varje jobb du söker**, även om det är 99% återanvändning av ett befintligt CV
 - Spara som `{Ditt_Namn}_CV_{företag}.pdf` (eller .docx) via career-ops PDF-generering
 - Justera minst: titel, profil-stycke, och 2-3 rader i kompetenser/erfarenhet så de speglar annonsens ord
-- Detta gäller även snabba ansökningar - inget mer "återanvänder Friday_Mac som den är"
-- Logga vilket CV som skickades i pipeline.html-noten (t.ex. "Ansökt 2026-04-22, CV: Akkodis-variant")
+- Detta gäller även snabba ansökningar - återanvänd aldrig ett tidigare CV rakt av
+- Logga vilket CV som skickades i pipeline.html-noten (t.ex. "Ansökt 2026-04-22, CV: {företag}-variant")
 
 ## Generera CV och brev (workflow)
 - Standardvägen: `/career-ops pdf` (kör `career-ops/generate-pdf.mjs`, Playwright HTML→PDF via `career-ops/templates/cv-template.html`), källa till sanning är `career-ops/cv.md` + `career-ops/config/profile.yml`
 - Skapas i `career-ops/output/`: `{namn}-cv-{key}.html` + PDF
-- Om du hellre bygger .docx-varianter för hand (äldre arbetssätt): skriv ett eget skript i `outputs/` som tar profilen + variant-specifik info och bygger .docx via python-docx, konvertera med `libreoffice --headless --convert-to pdf {fil}.docx --outdir .`. Namnge `{Ditt_Namn}_CV_{key}.docx`/`_Brev_{key}.docx` i hittajobb-roten — matchar gitignore-mönstren `*_CV_*`/`*_Brev_*`
+- Om du hellre bygger .docx-varianter för hand (äldre arbetssätt): skriv ett eget skript i `outputs/` som tar profilen + variant-specifik info och bygger .docx via python-docx, konvertera med `libreoffice --headless --convert-to pdf {fil}.docx --outdir .`. Namnge `{Ditt_Namn}_CV_{key}.docx`/`_Brev_{key}.docx` i repo-roten — matchar gitignore-mönstren `*_CV_*`/`*_Brev_*`
 - **Båda format levereras** när du bygger .docx-varianten - .docx för redigering, .pdf för uppladdning
-- Dela ut via `computer://C:\AI\hittajobb\{filnamn}.pdf`-länkar
-- Edit-tool och bash-tool ser olika filsystem-paths (Windows fil vs Linux mount). Om syntaxfel uppstår vid bash-körning: skriv om hela filen via `cat > /sessions/.../mnt/outputs/script.py << 'PYEOF' ... PYEOF`
+- Leverera filerna till användaren med den länk- eller filfunktion som miljön har (Claude Code, Cowork osv.)
+- I miljöer där Edit-verktyget och bash ser olika sökvägar (t.ex. Windows-mapp + Linux-mount i Cowork): skriv skript och filer via bash i sin helhet hellre än att blanda verktygen
 
 ## Chrome-flöde för ansökningar
 - Öppna annonsen i Chrome MCP, identifiera ansökningssättet:
-  - **Mail (info@xxx.se):** öppna Gmail-utkast med to+subject+body pre-fyllt via URL-params (`https://mail.google.com/mail/u/0/?fs=1&tf=cm&to=...&su=...&body=...`)
+  - **Mail (info@xxx.se):** skapa ett utkast via en ansluten mejlkoppling (t.ex. Gmail-connector) om sådan finns, annars ge användaren mottagare, ämne och brevtext att klistra in själv. Lägg aldrig brevtext eller kontaktuppgifter i URL-parametrar
   - **Webbformulär:** scrolla, identifiera fält via `find`, fyll i namn/mejl/telefon, klistra in brev i cover letter-textbox där sådan finns
   - **Portaler med eget konto (Zerolime/recman m.fl.):** lösenord-baserad inloggning kräver att du själv loggar in (säkerhetsregel)
 - **File upload (CV/brev) blockeras av Chrome MCP säkerhetsregler** - du måste själv klicka 📎 paperclip eller 'upload'-knappen och välja PDF:erna
-- Stanna ALLTID innan submit/send. Per `feedback_jobbsok_workflow.md`: aldrig tryck "skicka"
+- Stanna ALLTID innan submit/send: tryck aldrig "skicka", användaren skickar själv
 - Cookie-banners: välj alltid "Avvisa alla" / mest privacy-bevarande automatiskt
 
 ## Principer
 - Ärlig, konkret ton, inget corporatespeak
-- Anpassa CV-variant efter roll (3 befintliga + career-ops PDF-generering + nya per-jobb-varianter)
+- Anpassa CV-variant efter roll (career-ops PDF-generering + nya per-jobb-varianter)
 - Anpassa efter ditt läge — akut bred sökning kontra selektiv jakt på drömroller kräver olika strategi
 - Aldrig em-dash (—) i text. En-dash (–) är ok men sparsamt. Vanligt bindestreck (-) duger oftast
 - **Inga rapporter för ohjälpliga jobb** - om mandatory-krav saknas, markera EJ AKTUELL direkt och gå vidare

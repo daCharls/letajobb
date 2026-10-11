@@ -22,24 +22,23 @@ There are two layers. Read `DATA_CONTRACT.md` for the full list.
 
 **THE RULE: When the user asks to customize anything (archetypes, narrative, negotiation scripts, proof points, location policy, comp targets), ALWAYS write to `modes/_profile.md` or `config/profile.yml`. NEVER edit `modes/_shared.md` for user-specific content.** This ensures system updates don't overwrite their customizations.
 
-## Update Check
+## Update Check (AVSTÄNGD i den här forken)
 
-On the first message of each session, run the update checker silently:
+**Kör INTE `node update-system.mjs` vid sessionsstart, och erbjud inte
+upstream-uppdateringar.** Den här mappen är en svensk fork av
+santifer/career-ops. Upstreams uppdaterare skriver över bland annat
+`templates/`, `.claude/skills/`, `CLAUDE.md` och `generate-pdf.mjs` - alltså
+forkens svenska anpassningar. Skriptet vägrar därför köra så länge
+`.no-upstream-update` finns i den här mappen.
 
-```bash
-node update-system.mjs check
-```
+Vill någon ändå hämta nyheter från upstream görs det för hand (diff + manuell
+merge), inte via `update-system.mjs apply`.
 
-Parse the JSON output:
-- `{"status": "update-available", "local": "1.0.0", "remote": "1.1.0", "changelog": "..."}` → tell the user:
-  > "career-ops update available (v{local} → v{remote}). Your data (CV, profile, tracker, reports) will NOT be touched. Want me to update?"
-  If yes → run `node update-system.mjs apply`. If no → run `node update-system.mjs dismiss`.
-- `{"status": "up-to-date"}` → say nothing
-- `{"status": "dismissed"}` → say nothing
-- `{"status": "offline"}` → say nothing
+## Fork-not: onboarding
 
-The user can also say "check for updates" or "update career-ops" at any time to force a check.
-To rollback: `node update-system.mjs rollback`
+I den här forken gäller `ONBOARDING.md` i repo-roten, inte stegen under
+"First Run — Onboarding" nedan. Särskilt: `portals.yml` ska kopieras från
+`templates/portals.svenska.example.yml`, inte `templates/portals.example.yml`.
 
 ## What is career-ops
 
